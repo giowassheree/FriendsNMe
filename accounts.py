@@ -16,7 +16,8 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "Frontend"
-DATA_DIR = BASE_DIR / "server" / "data"
+DEFAULT_DATA_DIR = Path("/tmp/friendsnme-data") if os.environ.get("VERCEL") else BASE_DIR / "server" / "data"
+DATA_DIR = Path(os.environ.get("AUTH_DATA_DIR", DEFAULT_DATA_DIR))
 DB_PATH = DATA_DIR / "auth-db.json"
 
 CODE_TTL_MINUTES = 10
@@ -28,6 +29,12 @@ TEMPLE_EMAIL_RE = re.compile(r"^[^\s@]+@temple\.edu$", re.IGNORECASE)
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path="")
 app.secret_key = os.environ.get("SESSION_SECRET", "development-only-secret-change-me")
 app.permanent_session_lifetime = timedelta(days=30)
+
+if os.environ.get("VERCEL"):
+    app.config.update(
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
 
 
 def now_utc():
@@ -117,7 +124,8 @@ def json_error(message, status):
 
 def send_verification_email(email, code):
     should_log = os.environ.get("AUTH_LOG_VERIFICATION_CODES", "").lower() == "true"
-    is_production = os.environ.get("FLASK_ENV") == "production"
+    is_hosted = bool(os.environ.get("VERCEL"))
+    is_production = os.environ.get("FLASK_ENV") == "production" or is_hosted
 
     if should_log or not is_production and not os.environ.get("SMTP_HOST"):
         print(f"[auth] Verification code for {email}: {code}", flush=True)
