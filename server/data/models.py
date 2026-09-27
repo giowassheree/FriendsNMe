@@ -57,6 +57,21 @@ class LocationShare(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 
+class HelpRequest(db.Model):
+    # Created when someone doesn't answer their "Are you OK?" check.
+    # Friends they share their location with are alerted until it's
+    # resolved (they tap "I'm OK") or it expires.
+    __tablename__ = "help_requests"
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+
+    user_id = db.Column(db.String, db.ForeignKey("users.id"), nullable=False, index=True)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
 class VerificationCode(db.Model):
     __tablename__ = "verification_codes"
 

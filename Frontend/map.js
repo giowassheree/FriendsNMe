@@ -258,6 +258,7 @@ function render(data) {
   renderFriends(data.friends, data.freshSeconds);
   frameOnce(data);
   checkForAlerts(data); // alerts.js
+  updateRoute(); // route.js
 }
 
 // On the first load, zoom to the party and friends. After that the
@@ -331,6 +332,9 @@ function renderStatus(me) {
 }
 
 function friendDetail(friend, freshSeconds) {
+  if (friend.needsHelp) {
+    return `Needs help! · ${friend.location ? timeAgo(friend.ageSeconds) : "location unknown"}`;
+  }
   if (!friend.location) return "Hasn't shared a location yet";
 
   const ago = timeAgo(friend.ageSeconds);
@@ -341,6 +345,7 @@ function friendDetail(friend, freshSeconds) {
 }
 
 function friendTone(friend, freshSeconds) {
+  if (friend.needsHelp) return "far";
   if (!friend.location || friend.ageSeconds > freshSeconds) return "none";
   return STATUS_INFO[friend.status].tone;
 }
@@ -399,7 +404,13 @@ function renderFriends(friends, freshSeconds) {
     if (!friend.location) return;
 
     const lngLat = [friend.location.longitude, friend.location.latitude];
+    row.classList.toggle("needs-help", friend.needsHelp);
     row.addEventListener("click", () => {
+      // Someone who needs help gets a walking route (alerts.js).
+      if (friend.needsHelp) {
+        routeToFriend(friend);
+        return;
+      }
       map.flyTo({ center: lngLat, zoom: 17 });
       friendMarkers.get(friend.id)?.togglePopup();
     });
@@ -423,6 +434,7 @@ function renderFriends(friends, freshSeconds) {
     const element = marker.getElement();
     element.dataset.tone = tone;
     element.classList.toggle("is-stale", stale);
+    element.classList.toggle("needs-help", friend.needsHelp);
     element.setAttribute("aria-label", `${friend.username}: ${detail}`);
     marker.setLngLat(lngLat);
     marker.getPopup().setText(`${friend.username} · ${detail}`);
@@ -492,6 +504,7 @@ document.addEventListener("friendsnme:signed-out", () => {
   latestData = null;
   hasFramed = false;
   resetAlerts(); // alerts.js
+  clearRoute(); // route.js
   userMarker.remove();
   userMarkerAdded = false;
   friendMarkers.forEach((marker) => marker.remove());

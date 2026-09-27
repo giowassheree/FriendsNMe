@@ -466,6 +466,49 @@ input {
   text-decoration: none;
 }
 
+.ok-check-close {
+  justify-self: center;
+  color: var(--muted);
+}
+
+/* Walking route panel (route.js) */
+.route-panel span {
+  display: block;
+}
+
+.route-maps-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: #f0bac3;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.route-maps-link[hidden] {
+  display: none;
+}
+
+/* Friends who missed their check-in */
+.friend-marker.needs-help {
+  animation: needs-help-pulse 1.2s ease-out infinite;
+}
+
+.friend-row.needs-help {
+  border-color: var(--status-far);
+}
+
+@keyframes needs-help-pulse {
+  from { box-shadow: 0 0 0 0 rgb(255 107 107 / 70%); }
+  to { box-shadow: 0 0 0 16px rgb(255 107 107 / 0%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .friend-marker.needs-help {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(255 107 107 / 60%);
+  }
+}
+
 /* Wandering alert banner (alerts.js); tap to dismiss */
 .alert-toast {
   position: fixed;

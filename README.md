@@ -119,6 +119,15 @@ Wandering alerts (`Frontend/alerts.js`):
   `alerts.js`). Browsers never place calls on their own, and many only open
   the dialer from a tap, so the popup keeps a "Call now" button that always
   works until "I'm OK" is pressed.
+- When the timer runs out, a help request (`/api/help`) alerts everyone you
+  share your location with: they get a "needs help" popup and notification,
+  your marker pulses red, and "Show me the way" draws a walking route to you
+  that follows you as you move (plus a Google Maps link). Tapping "I'm OK"
+  clears it (`/api/help/resolve`), tells them you're OK, and draws a route
+  back to your party. Unanswered requests expire after 2 hours.
+- Walking routes (`Frontend/route.js`) come from the free OpenStreetMap foot
+  router at routing.openstreetmap.de (fair use, no key). If it's unreachable
+  a dashed straight line is drawn instead.
 
 Location sharing is one-way: adding someone on the Sharing page lets them see
 you on their map. They only appear on yours if they add you back.

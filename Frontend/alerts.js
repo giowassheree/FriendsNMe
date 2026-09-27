@@ -38,6 +38,8 @@ const canNotify = "Notification" in window && window.isSecureContext;
 // ==================================================
 
 function checkForAlerts(data) {
+  checkHelpRequests(data);
+
   const people = [];
 
   if (data.me.party) {
@@ -87,8 +89,11 @@ function checkForAlerts(data) {
 
 function resetAlerts() {
   alertState.clear();
+  helpAlerted.clear();
+  helpSent = false;
   hideToast();
   hideOkCheck();
+  hideHelpAlert();
 }
 
 // ==================================================
@@ -130,10 +135,10 @@ function sendAlert(person, level) {
   }
 }
 
-async function systemNotify(title, body, tag) {
+async function systemNotify(title, body, tag, extraOptions = {}) {
   if (!canNotify || Notification.permission !== "granted") return;
 
-  const options = { body, tag, renotify: true };
+  const options = { body, tag, renotify: true, ...extraOptions };
   try {
     const registration = await navigator.serviceWorker?.getRegistration();
     if (registration) {
@@ -180,6 +185,7 @@ const okEls = {
   countdown: document.getElementById("okCheckCountdown"),
   okButton: document.getElementById("okCheckButton"),
   callLink: document.getElementById("okCheckCall"),
+  help: document.getElementById("okCheckHelp"),
 };
 
 let okTimer = null;
@@ -187,18 +193,30 @@ let okTimer = null;
 okEls.callLink.href = `tel:${CHECK_IN_PHONE}`;
 okEls.callLink.textContent = `Call ${CHECK_IN_PHONE_LABEL} now`;
 
-function showOkCheck(distance) {
+// True once this check-in's help alert went out, until it's resolved.
+let helpSent = false;
+
+function showOkCheck(distance, { alreadySent = false } = {}) {
   if (!okEls.overlay.hidden) return;
 
-  let secondsLeft = OK_CHECK_SECONDS;
+  helpSent = alreadySent;
   okEls.distance.textContent =
-    `You're ${Math.round(distance)} m from your party.`;
-  okEls.countdown.textContent =
-    `Calling ${CHECK_IN_PHONE_LABEL} in ${secondsLeft}...`;
+    distance == null ? "" : `You're ${Math.round(distance)} m from your party.`;
+  okEls.help.textContent = "";
   okEls.overlay.hidden = false;
   okEls.okButton.focus();
-
   clearInterval(okTimer);
+
+  if (alreadySent) {
+    okEls.countdown.textContent =
+      "Your friends were alerted. Tap “I'm OK” to let them know you're fine.";
+    return;
+  }
+
+  let secondsLeft = OK_CHECK_SECONDS;
+  okEls.countdown.textContent =
+    `Calling ${CHECK_IN_PHONE_LABEL} in ${secondsLeft}...`;
+
   okTimer = setInterval(() => {
     secondsLeft -= 1;
 
@@ -211,8 +229,30 @@ function showOkCheck(distance) {
 
     clearInterval(okTimer);
     okTimer = null;
-    dialCheckInPhone();
+    timeRanOut();
   }, 1000);
+}
+
+function listNames(names) {
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function timeRanOut() {
+  helpSent = true;
+  okEls.countdown.textContent = "Alerting your friends...";
+
+  // Alert friends first: opening the dialer can interrupt the page.
+  api("/api/help", {})
+    .then((data) => {
+      okEls.help.textContent = data.notified.length
+        ? `Alert sent to ${listNames(data.notified)}. They can see where you are.`
+        : "No friends were alerted: you aren't sharing your location with anyone yet.";
+    })
+    .catch((helpError) => {
+      okEls.help.textContent = `Couldn't alert your friends: ${helpError.message}`;
+    })
+    .finally(dialCheckInPhone);
 }
 
 function dialCheckInPhone() {
@@ -231,9 +271,39 @@ function hideOkCheck() {
   okEls.overlay.hidden = true;
 }
 
+function routeBackToParty() {
+  const currentParty = () => {
+    const party = latestData?.me?.party || latestData?.me?.leftParty;
+    return party ? party.center : null;
+  };
+
+  if (!currentParty()) {
+    showToast("Glad you're OK", "", "inside");
+    return;
+  }
+
+  showToast("Glad you're OK", "Here's the way back to your party.", "inside");
+  showRoute("your party", "inside", currentParty); // route.js
+}
+
 okEls.okButton.addEventListener("click", () => {
   hideOkCheck();
-  showToast("Glad you're OK", "Head back toward your party when you can.", "inside");
+
+  if (helpSent) {
+    // Tell friends it was a false alarm. helpSent stays true until
+    // this finishes so a map refresh doesn't reopen the popup.
+    api("/api/help/resolve", {})
+      .then((data) => {
+        helpSent = false;
+        render(data); // map.js
+      })
+      .catch((resolveError) => {
+        helpSent = false;
+        showToast("Couldn't tell your friends you're OK", resolveError.message, "far");
+      });
+  }
+
+  routeBackToParty();
 });
 
 okEls.callLink.addEventListener("click", () => {
@@ -241,6 +311,89 @@ okEls.callLink.addEventListener("click", () => {
   clearInterval(okTimer);
   okTimer = null;
 });
+
+// ==================================================
+// A FRIEND NEEDS HELP
+// ==================================================
+
+const helpEls = {
+  overlay: document.getElementById("helpAlert"),
+  title: document.getElementById("helpAlertTitle"),
+  detail: document.getElementById("helpAlertDetail"),
+  route: document.getElementById("helpAlertRoute"),
+  mapsLink: document.getElementById("helpAlertMaps"),
+  close: document.getElementById("helpAlertClose"),
+};
+
+// Friends we've already alerted about their current help request.
+const helpAlerted = new Set();
+let helpAlertFriend = null;
+
+function friendLocation(friendId) {
+  return latestData?.friends.find((friend) => friend.id === friendId)?.location || null;
+}
+
+function routeToFriend(friend) {
+  showRoute(friend.username, "far", () => friendLocation(friend.id)); // route.js
+}
+
+function checkHelpRequests(data) {
+  // My own request is still open (e.g. the page was reloaded).
+  if (data.me.needsHelp && !helpSent && okEls.overlay.hidden) {
+    showOkCheck(data.me.distanceFromParty, { alreadySent: true });
+  }
+
+  data.friends.forEach((friend) => {
+    if (friend.needsHelp && !helpAlerted.has(friend.id)) {
+      helpAlerted.add(friend.id);
+      showHelpAlert(friend);
+    } else if (!friend.needsHelp && helpAlerted.has(friend.id)) {
+      helpAlerted.delete(friend.id);
+      if (helpAlertFriend?.id === friend.id) hideHelpAlert();
+      const body = `${friend.username} answered their check-in.`;
+      showToast(`${friend.username} is OK`, body, "inside");
+      systemNotify(`${friend.username} is OK`, body, `friendsnme-help-${friend.id}`);
+    }
+  });
+}
+
+function showHelpAlert(friend) {
+  helpAlertFriend = friend;
+  helpEls.title.textContent = `${friend.username} needs help`;
+  helpEls.detail.textContent = friend.location
+    ? `${friend.username} didn't answer their “Are you OK?” check. ` +
+      `Their location was updated ${timeAgo(friend.ageSeconds)}.`
+    : `${friend.username} didn't answer their “Are you OK?” check, ` +
+      "and we don't have their location.";
+
+  helpEls.route.hidden = !friend.location;
+  helpEls.mapsLink.hidden = !friend.location;
+  if (friend.location) helpEls.mapsLink.href = googleMapsWalkingUrl(friend.location);
+
+  helpEls.overlay.hidden = false;
+  (friend.location ? helpEls.route : helpEls.close).focus();
+
+  if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+  systemNotify(
+    `${friend.username} needs help`,
+    `${friend.username} didn't answer their check-in. Open FriendsNMe to find them.`,
+    `friendsnme-help-${friend.id}`,
+    { requireInteraction: true }
+  );
+}
+
+function hideHelpAlert() {
+  helpEls.overlay.hidden = true;
+  helpAlertFriend = null;
+}
+
+helpEls.route.addEventListener("click", () => {
+  const friend = helpAlertFriend;
+  hideHelpAlert();
+  if (friend) routeToFriend(friend);
+});
+
+helpEls.close.addEventListener("click", hideHelpAlert);
 
 // ==================================================
 // NOTIFICATION PERMISSION

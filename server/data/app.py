@@ -12,7 +12,7 @@ from email.message import EmailMessage
 
 from flask import Flask, request, jsonify, send_from_directory, session
 
-from models import db, User, VerificationCode, LocationShare
+from models import db, User, VerificationCode, LocationShare, HelpRequest
 
 from party import PartyTracker, FRESH_SECONDS
 
@@ -747,6 +747,35 @@ def party_locations(current):
     return locations
 
 
+# A help request stops alerting friends after this long, even if
+# nobody taps "I'm OK".
+HELP_REQUEST_HOURS = 2
+
+
+def active_help_request(user_id, current):
+
+    return (
+        HelpRequest.query
+        .filter(
+            HelpRequest.user_id == user_id,
+            HelpRequest.resolved_at.is_(None),
+            HelpRequest.created_at
+            >= current - timedelta(hours=HELP_REQUEST_HOURS),
+        )
+        .order_by(HelpRequest.created_at.desc())
+        .first()
+    )
+
+
+def public_location(loc):
+
+    return {
+        "latitude": loc["latitude"],
+        "longitude": loc["longitude"],
+        "accuracy": loc.get("accuracy"),
+    }
+
+
 def map_payload(user):
 
     # Everything the map needs: my party and status, plus the
@@ -789,6 +818,10 @@ def map_payload(user):
             "status": "NOT_IN_PARTY",
             "distanceFromParty": None,
             "sameParty": False,
+            # They missed their "Are you OK?" check.
+            "needsHelp": bool(
+                active_help_request(friend.id, current)
+            ),
         }
 
         if has_location(friend):
@@ -800,11 +833,7 @@ def map_payload(user):
                 loc
             )
 
-            entry["location"] = {
-                "latitude": loc["latitude"],
-                "longitude": loc["longitude"],
-                "accuracy": loc.get("accuracy"),
-            }
+            entry["location"] = public_location(loc)
             entry["ageSeconds"] = location_age_seconds(
                 loc,
                 current
@@ -829,6 +858,15 @@ def map_payload(user):
                 my_status["distanceFromParty"],
             # The party I left, if I can still rejoin it.
             "leftParty": my_status["leftParty"],
+            # Used to draw routes when this phone isn't tracking.
+            "location": (
+                public_location(user.last_location)
+                if has_location(user)
+                else None
+            ),
+            "needsHelp": bool(
+                active_help_request(user.id, current)
+            ),
         },
         "friends": friends,
         "freshSeconds": FRESH_SECONDS,
@@ -967,6 +1005,69 @@ def rejoin_party():
             "That party has ended, so there is nothing to rejoin.",
             409
         )
+
+    return jsonify(map_payload(user))
+
+
+# ==================================================
+# HELP REQUESTS ("ARE YOU OK?" NOT ANSWERED)
+# ==================================================
+
+@app.post("/api/help")
+def request_help():
+
+    user = require_user()
+
+    if not user:
+        return json_error("You must be signed in.", 401)
+
+    current = now_utc()
+
+    if not active_help_request(user.id, current):
+        db.session.add(HelpRequest(user_id=user.id))
+        db.session.commit()
+
+    # Everyone this user shares their location with is alerted;
+    # they already see where the user is on their map.
+    viewers = (
+        User.query
+        .join(
+            LocationShare,
+            LocationShare.viewer_id == User.id
+        )
+        .filter(LocationShare.owner_id == user.id)
+        .order_by(User.username_lower)
+        .all()
+    )
+
+    print(
+        "HELP REQUESTED:",
+        user.username,
+        "| alerting:",
+        [viewer.username for viewer in viewers],
+        flush=True
+    )
+
+    return jsonify({
+        "ok": True,
+        "notified": [viewer.username for viewer in viewers],
+    })
+
+
+@app.post("/api/help/resolve")
+def resolve_help():
+
+    user = require_user()
+
+    if not user:
+        return json_error("You must be signed in.", 401)
+
+    HelpRequest.query.filter(
+        HelpRequest.user_id == user.id,
+        HelpRequest.resolved_at.is_(None),
+    ).update({"resolved_at": now_utc()})
+
+    db.session.commit()
 
     return jsonify(map_payload(user))
 

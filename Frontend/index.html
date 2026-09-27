@@ -14,6 +14,7 @@
   <script src="./index.js" defer></script>
   <script src="./alerts.js" defer></script>
   <script src="./map.js" defer></script>
+  <script src="./route.js" defer></script>
 </head>
 
 
@@ -78,6 +79,7 @@
       <h2 id="okCheckTitle">Are you OK?</h2>
       <p id="okCheckDistance"></p>
       <p id="okCheckCountdown" class="ok-check-countdown" aria-live="assertive"></p>
+      <p id="okCheckHelp" aria-live="polite"></p>
       <button
         id="okCheckButton"
         class="primary-button ok-check-button"
@@ -88,6 +90,41 @@
         id="okCheckCall"
         class="ghost-button ok-check-call"
         href="#"></a>
+    </section>
+  </div>
+
+  <!-- Shown by alerts.js when a friend misses their check-in -->
+  <div
+    id="helpAlert"
+    class="ok-check-overlay"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="helpAlertTitle"
+    aria-describedby="helpAlertDetail"
+    hidden>
+    <section class="ok-check">
+      <h2 id="helpAlertTitle"></h2>
+      <p id="helpAlertDetail"></p>
+      <button
+        id="helpAlertRoute"
+        class="primary-button ok-check-button"
+        type="button">
+        Show me the way
+      </button>
+      <a
+        id="helpAlertMaps"
+        class="ghost-button ok-check-call"
+        href="#"
+        target="_blank"
+        rel="noopener">
+        Walking directions in Google Maps
+      </a>
+      <button
+        id="helpAlertClose"
+        class="link-button ok-check-close"
+        type="button">
+        Close
+      </button>
     </section>
   </div>
 
@@ -133,6 +170,33 @@
             type="button"
             hidden>
             Rejoin party
+          </button>
+        </section>
+
+        <!-- Walking route on the map (route.js) -->
+        <section
+          id="routePanel"
+          class="party-status route-panel"
+          data-tone="far"
+          aria-live="polite"
+          hidden>
+          <div>
+            <strong id="routeLabel"></strong>
+            <span id="routeDetail"></span>
+            <a
+              id="routeMapsLink"
+              class="route-maps-link"
+              href="#"
+              target="_blank"
+              rel="noopener">
+              Open in Google Maps
+            </a>
+          </div>
+          <button
+            id="routeClear"
+            class="share-remove-button"
+            type="button">
+            Clear
           </button>
         </section>
 
