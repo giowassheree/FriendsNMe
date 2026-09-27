@@ -113,6 +113,12 @@ Wandering alerts (`Frontend/alerts.js`):
   would need Web Push from the server.
 - Notifications need https (or localhost), like location. On iPhone they only
   work if the site is added to the home screen.
+- "Are you OK?" check: when *you* become `FAR_FROM_PARTY`, a popup asks if
+  you're OK. If "I'm OK" isn't tapped within 5 seconds, the page tries to open
+  the phone's dialer with the check-in number (`CHECK_IN_PHONE` in
+  `alerts.js`). Browsers never place calls on their own, and many only open
+  the dialer from a tap, so the popup keeps a "Call now" button that always
+  works until "I'm OK" is pressed.
 
 Location sharing is one-way: adding someone on the Sharing page lets them see
 you on their map. They only appear on yours if they add you back.

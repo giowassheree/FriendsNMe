@@ -65,6 +65,32 @@
     <span id="alertToastBody"></span>
   </div>
 
+  <!-- Shown by alerts.js when you end up far from your party -->
+  <div
+    id="okCheck"
+    class="ok-check-overlay"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="okCheckTitle"
+    aria-describedby="okCheckDistance okCheckCountdown"
+    hidden>
+    <section class="ok-check">
+      <h2 id="okCheckTitle">Are you OK?</h2>
+      <p id="okCheckDistance"></p>
+      <p id="okCheckCountdown" class="ok-check-countdown" aria-live="assertive"></p>
+      <button
+        id="okCheckButton"
+        class="primary-button ok-check-button"
+        type="button">
+        I'm OK
+      </button>
+      <a
+        id="okCheckCall"
+        class="ghost-button ok-check-call"
+        href="#"></a>
+    </section>
+  </div>
+
   <main
     id="app"
     class="map-shell"

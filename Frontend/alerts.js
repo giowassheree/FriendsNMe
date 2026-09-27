@@ -88,6 +88,7 @@ function checkForAlerts(data) {
 function resetAlerts() {
   alertState.clear();
   hideToast();
+  hideOkCheck();
 }
 
 // ==================================================
@@ -122,6 +123,11 @@ function sendAlert(person, level) {
 
   // One notification per person, replaced as their status changes.
   systemNotify(title, body, `friendsnme-${person.id}`);
+
+  // When *I* end up far from the party, check that I'm OK.
+  if (person.id === "me" && level === ALERT_LEVEL.FAR_FROM_PARTY) {
+    showOkCheck(person.distance);
+  }
 }
 
 async function systemNotify(title, body, tag) {
@@ -157,6 +163,84 @@ function hideToast() {
 }
 
 alertEls.toast.addEventListener("click", hideToast);
+
+// ==================================================
+// "ARE YOU OK?" CHECK
+// ==================================================
+
+// Who to call if you don't answer. Note: this file is public on
+// GitHub, so anyone can read this number.
+const CHECK_IN_PHONE = "+12678088271";
+const CHECK_IN_PHONE_LABEL = "267-808-8271";
+const OK_CHECK_SECONDS = 5;
+
+const okEls = {
+  overlay: document.getElementById("okCheck"),
+  distance: document.getElementById("okCheckDistance"),
+  countdown: document.getElementById("okCheckCountdown"),
+  okButton: document.getElementById("okCheckButton"),
+  callLink: document.getElementById("okCheckCall"),
+};
+
+let okTimer = null;
+
+okEls.callLink.href = `tel:${CHECK_IN_PHONE}`;
+okEls.callLink.textContent = `Call ${CHECK_IN_PHONE_LABEL} now`;
+
+function showOkCheck(distance) {
+  if (!okEls.overlay.hidden) return;
+
+  let secondsLeft = OK_CHECK_SECONDS;
+  okEls.distance.textContent =
+    `You're ${Math.round(distance)} m from your party.`;
+  okEls.countdown.textContent =
+    `Calling ${CHECK_IN_PHONE_LABEL} in ${secondsLeft}...`;
+  okEls.overlay.hidden = false;
+  okEls.okButton.focus();
+
+  clearInterval(okTimer);
+  okTimer = setInterval(() => {
+    secondsLeft -= 1;
+
+    if (secondsLeft > 0) {
+      okEls.countdown.textContent =
+        `Calling ${CHECK_IN_PHONE_LABEL} in ${secondsLeft}...`;
+      if (navigator.vibrate) navigator.vibrate(300);
+      return;
+    }
+
+    clearInterval(okTimer);
+    okTimer = null;
+    dialCheckInPhone();
+  }, 1000);
+}
+
+function dialCheckInPhone() {
+  // Browsers never place a call by themselves; the best a page can
+  // do is open the dialer with the number filled in. Many phones
+  // only allow that from a tap, so the Call button stays up in case
+  // this automatic attempt is blocked.
+  okEls.countdown.textContent =
+    "Opening your phone's dialer. If it didn't open, tap the Call button.";
+  window.location.href = `tel:${CHECK_IN_PHONE}`;
+}
+
+function hideOkCheck() {
+  clearInterval(okTimer);
+  okTimer = null;
+  okEls.overlay.hidden = true;
+}
+
+okEls.okButton.addEventListener("click", () => {
+  hideOkCheck();
+  showToast("Glad you're OK", "Head back toward your party when you can.", "inside");
+});
+
+okEls.callLink.addEventListener("click", () => {
+  // The tap opens the dialer through the link itself.
+  clearInterval(okTimer);
+  okTimer = null;
+});
 
 // ==================================================
 // NOTIFICATION PERMISSION
